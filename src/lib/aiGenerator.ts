@@ -1,21 +1,5 @@
-import { GoogleGenAI, Type } from "@google/genai";
-
-export type GeneratedWord = {
-    word: string;
-    phonetic: string;
-    type: string;
-    meaning: string;
-    example: string;
-};
-
-export type GeneratedSet = {
-    title: string;
-    description: string;
-    category: string;
-    level: string;
-    icon: string;
-    words: GeneratedWord[];
-};
+import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
+import { GeneratedSet, QuizQuestion } from "../types";
 
 export async function generateVocabularySet(
     topic: string,
@@ -30,7 +14,38 @@ export async function generateVocabularySet(
         throw new Error("API key is not configured. Please check your .env.local file.");
     }
 
-    const ai = new GoogleGenAI({ apiKey });
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({
+        model: "gemini-2.0-flash-exp",
+        generationConfig: {
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: SchemaType.OBJECT,
+                properties: {
+                    title: { type: SchemaType.STRING },
+                    description: { type: SchemaType.STRING },
+                    category: { type: SchemaType.STRING },
+                    level: { type: SchemaType.STRING },
+                    icon: { type: SchemaType.STRING },
+                    words: {
+                        type: SchemaType.ARRAY,
+                        items: {
+                            type: SchemaType.OBJECT,
+                            properties: {
+                                word: { type: SchemaType.STRING },
+                                phonetic: { type: SchemaType.STRING },
+                                type: { type: SchemaType.STRING },
+                                meaning: { type: SchemaType.STRING },
+                                example: { type: SchemaType.STRING }
+                            },
+                            required: ["word", "phonetic", "type", "meaning", "example"]
+                        }
+                    }
+                },
+                required: ["title", "description", "category", "level", "icon", "words"]
+            }
+        }
+    });
 
     const prompt = `Generate a vocabulary set for learning English on the topic: "${topic}"
 Difficulty level: ${level}
@@ -74,47 +89,17 @@ Return ONLY valid JSON with this exact structure:
     try {
         console.log("Generating vocabulary set for topic:", topic);
 
-        const response = await ai.models.generateContent({
-            model: "gemini-2.0-flash-exp",
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        title: { type: Type.STRING },
-                        description: { type: Type.STRING },
-                        category: { type: Type.STRING },
-                        level: { type: Type.STRING },
-                        icon: { type: Type.STRING },
-                        words: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    word: { type: Type.STRING },
-                                    phonetic: { type: Type.STRING },
-                                    type: { type: Type.STRING },
-                                    meaning: { type: Type.STRING },
-                                    example: { type: Type.STRING }
-                                },
-                                required: ["word", "phonetic", "type", "meaning", "example"]
-                            }
-                        }
-                    },
-                    required: ["title", "description", "category", "level", "icon", "words"]
-                }
-            }
-        });
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const text = response.text();
 
-        console.log("AI Response received:", response);
+        console.log("AI Response received:", text);
 
-        if (!response.text) {
-            console.error("No text in AI response:", response);
+        if (!text) {
             throw new Error("No response from AI");
         }
 
-        const generatedSet = JSON.parse(response.text) as GeneratedSet;
+        const generatedSet = JSON.parse(text) as GeneratedSet;
         console.log("Parsed generated set:", generatedSet);
 
         // Validate the response
@@ -126,7 +111,6 @@ Return ONLY valid JSON with this exact structure:
     } catch (error: any) {
         console.error("Detailed error generating vocabulary set:", error);
         console.error("Error message:", error.message);
-        console.error("Error stack:", error.stack);
 
         // Provide more specific error messages
         if (error.message?.includes("API key")) {
@@ -138,5 +122,161 @@ Return ONLY valid JSON with this exact structure:
         }
 
         throw new Error(`Failed to generate vocabulary set: ${error.message || "Unknown error"}`);
+    }
+}
+
+export async function generateQuiz(
+    words: { word: string; meaning: string }[],
+    count: number = 5,
+    type: 'multiple-choice' | 'fill-in-blank' = 'multiple-choice'
+): Promise<QuizQuestion[]> {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) {
+        throw new Error("API key is not configured");
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({
+        model: "gemini-2.0-flash-exp",
+        generationConfig: {
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: SchemaType.ARRAY,
+                items: {
+                    type: SchemaType.OBJECT,
+                    properties: {
+                        question: { type: SchemaType.STRING },
+                        options: {
+                            type: SchemaType.ARRAY,
+                            items: { type: SchemaType.STRING }
+                        },
+                        correctAnswer: { type: SchemaType.STRING }
+                    },
+                    required: ["question", "options", "correctAnswer"]
+                }
+            }
+        }
+    });
+
+    const wordsList = words.map(w => `${w.word}: ${w.meaning}`).join("\n");
+
+    let prompt = "";
+    if (type === 'multiple-choice') {
+        prompt = `Create a multiple-choice quiz with ${count} questions based on the following words. 
+        For each question, provide a definition or context and ask for the correct word, OR provide a word and ask for the correct definition.
+        Ensure there are 4 options for each question, and only one is correct.
+        
+        Words:
+        ${wordsList}`;
+    } else {
+        prompt = `Create a fill-in-the-blank quiz with ${count} questions based on the following words.
+        For each question, provide a sentence with the target word missing (represented by _____).
+        Provide 4 options for the missing word.
+        
+        Words:
+        ${wordsList}`;
+    }
+
+    try {
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const text = response.text();
+        return JSON.parse(text) as QuizQuestion[];
+    } catch (error: any) {
+        console.error("Error generating quiz:", error);
+        throw new Error(error.message || "Failed to generate quiz");
+    }
+}
+
+export async function generateRoleplayScenario(
+    topic: string,
+    words: { word: string; meaning: string }[]
+): Promise<import("../types").RoleplayScenario> {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) {
+        throw new Error("API key is not configured");
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({
+        model: "gemini-2.0-flash-exp",
+        generationConfig: {
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: SchemaType.OBJECT,
+                properties: {
+                    persona: { type: SchemaType.STRING },
+                    scenario: { type: SchemaType.STRING },
+                    initialMessage: { type: SchemaType.STRING }
+                },
+                required: ["persona", "scenario", "initialMessage"]
+            }
+        }
+    });
+
+    const wordsList = words.map(w => w.word).join(", ");
+
+    const prompt = `Create a roleplay scenario for learning English vocabulary about "${topic}".
+    Target words: ${wordsList}.
+    
+    1. Define a persona for the AI to play (e.g., "Hotel Receptionist", "Job Interviewer").
+    2. Describe the scenario (e.g., "Checking into a hotel", "Discussing a project").
+    3. Write an engaging initial message from the AI to start the conversation, using one of the target words if natural.
+    
+    Return JSON.`;
+
+    try {
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const text = response.text();
+        return JSON.parse(text) as import("../types").RoleplayScenario;
+    } catch (error: any) {
+        console.error("Error generating roleplay scenario:", error);
+        throw new Error(error.message || "Failed to generate roleplay scenario");
+    }
+}
+
+export async function generateStory(
+    words: { word: string; meaning: string }[]
+): Promise<{ title: string; content: string }> {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) {
+        throw new Error("API key is not configured");
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({
+        model: "gemini-2.0-flash-exp",
+        generationConfig: {
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: SchemaType.OBJECT,
+                properties: {
+                    title: { type: SchemaType.STRING },
+                    content: { type: SchemaType.STRING }
+                },
+                required: ["title", "content"]
+            }
+        }
+    });
+
+    const wordsList = words.map(w => `${w.word} (${w.meaning})`).join(", ");
+
+    const prompt = `Write a short, engaging story (approx. 200-300 words) that naturally incorporates the following vocabulary words: ${wordsList}.
+    
+    1. The story should be coherent and interesting.
+    2. Highlight the target words in the story by wrapping them in **double asterisks** (e.g., **word**).
+    3. Provide a catchy title for the story.
+    
+    Return JSON with "title" and "content".`;
+
+    try {
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const text = response.text();
+        return JSON.parse(text) as { title: string; content: string };
+    } catch (error: any) {
+        console.error("Error generating story:", error);
+        throw new Error(error.message || "Failed to generate story");
     }
 }

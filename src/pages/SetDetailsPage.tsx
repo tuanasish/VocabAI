@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
-import { QuizQuestion } from '../types';
-import { GoogleGenAI, Type } from "@google/genai";
 import { useSpeech } from '../hooks/useSpeech';
 import { supabase } from '../lib/supabaseClient';
 import { Database } from '../types/supabase';
@@ -19,11 +17,9 @@ type Word = Database['public']['Tables']['words']['Row'];
 
 const SetDetailsPage: React.FC = () => {
     const { id } = useParams<{ id: string }>();
+    const navigate = useNavigate();
     const [set, setSet] = useState<VocabularySet | null>(null);
     const [loading, setLoading] = useState(true);
-    const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
-    const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[] | null>(null);
-    const [showQuizModal, setShowQuizModal] = useState(false);
     const [isAddWordModalOpen, setIsAddWordModalOpen] = useState(false);
     const [isEditWordModalOpen, setIsEditWordModalOpen] = useState(false);
     const [isEditSetModalOpen, setIsEditSetModalOpen] = useState(false);
@@ -85,53 +81,6 @@ const SetDetailsPage: React.FC = () => {
         fetchSet();
     }, [id]);
 
-    const handleGenerateQuiz = async () => {
-        if (words.length === 0) {
-            alert("This set has no words to generate a quiz from.");
-            return;
-        }
-
-        setIsGeneratingQuiz(true);
-        try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-            const wordsString = words.map(w => `${w.word}: ${w.meaning}`).join(", ");
-
-            const prompt = `Create a quiz with 3 multiple choice questions based on these words and meanings: ${wordsString}. Return JSON.`;
-
-            const response = await ai.models.generateContent({
-                model: "gemini-2.5-flash",
-                contents: prompt,
-                config: {
-                    responseMimeType: "application/json",
-                    responseSchema: {
-                        type: Type.ARRAY,
-                        items: {
-                            type: Type.OBJECT,
-                            properties: {
-                                question: { type: Type.STRING },
-                                options: { type: Type.ARRAY, items: { type: Type.STRING } },
-                                correctAnswer: { type: Type.STRING }
-                            },
-                            required: ["question", "options", "correctAnswer"]
-                        }
-                    }
-                }
-            });
-
-            if (response.text) {
-                const questions = JSON.parse(response.text) as QuizQuestion[];
-                setQuizQuestions(questions);
-                setShowQuizModal(true);
-            }
-
-        } catch (error) {
-            console.error("Error generating quiz:", error);
-            alert("Failed to generate quiz. Please check your API key configuration.");
-        } finally {
-            setIsGeneratingQuiz(false);
-        }
-    };
-
     if (loading || wordsLoading) {
         return (
             <Layout>
@@ -177,18 +126,36 @@ const SetDetailsPage: React.FC = () => {
                     </div>
 
                     {/* Action Bar */}
-                    <div className="flex flex-col md:flex-row gap-4 items-center">
-                        <div className="w-full md:w-auto">
-                            <div className="flex h-12 flex-1 items-center justify-center rounded-xl bg-slate-200 dark:bg-slate-800 p-1.5">
-                                {['Learn List', 'Flashcards', 'Quiz'].map((mode) => (
-                                    <Link to={mode === 'Flashcards' ? `/practice/${set.id}` : mode === 'Learn List' ? `/learn/${set.id}` : '#'} key={mode} className={`flex cursor-pointer h-full grow items-center justify-center overflow-hidden rounded-lg px-4 text-sm font-medium transition-colors duration-200 ${mode === 'Learn List' ? 'bg-white dark:bg-slate-900 shadow-sm text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>
-                                        {mode}
-                                    </Link>
-                                ))}
-                            </div>
-                        </div>
-                        <div className="flex-grow hidden md:block"></div>
-                        <div className="flex flex-col sm:flex-row w-full md:w-auto gap-4 items-center">
+                    {/* Study Center */}
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                        {[
+                            { label: 'Flashcards', icon: 'style', path: `/practice/${set.id}`, color: 'bg-blue-500', desc: 'Review terms' },
+                            { label: 'Quiz', icon: 'quiz', path: `/quiz/${set.id}`, color: 'bg-purple-500', desc: 'Test knowledge' },
+                            { label: 'Roleplay', icon: 'theater_comedy', path: `/roleplay/${set.id}`, color: 'bg-pink-500', desc: 'AI Chat' },
+                            { label: 'Story', icon: 'auto_stories', path: `/story/${set.id}`, color: 'bg-amber-500', desc: 'Context reading' },
+                            { label: 'Speaking', icon: 'mic', path: `/speaking/${set.id}`, color: 'bg-emerald-500', desc: 'Pronunciation' },
+                        ].map((mode) => (
+                            <Link
+                                key={mode.label}
+                                to={mode.path}
+                                className="flex flex-col items-center justify-center p-4 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary dark:hover:border-primary hover:shadow-md transition-all group"
+                            >
+                                <div className={`w-12 h-12 rounded-full ${mode.color} bg-opacity-10 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform`}>
+                                    <span className={`material-symbols-outlined text-2xl ${mode.color.replace('bg-', 'text-')}`}>{mode.icon}</span>
+                                </div>
+                                <span className="font-bold text-slate-900 dark:text-white mb-1">{mode.label}</span>
+                                <span className="text-xs text-slate-500 dark:text-slate-400 text-center">{mode.desc}</span>
+                            </Link>
+                        ))}
+                    </div>
+
+                    {/* Action Bar & Word List Header */}
+                    <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-4">
+                        <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                            <span className="material-symbols-outlined text-slate-400">list</span>
+                            Word List ({words.length})
+                        </h2>
+                        <div className="flex items-center gap-3">
                             <ActionMenu
                                 items={[
                                     {
@@ -201,33 +168,19 @@ const SetDetailsPage: React.FC = () => {
                                         icon: 'delete',
                                         variant: 'danger',
                                         onClick: () => {
-                                            // We need to implement delete set logic here or redirect to dashboard with delete intent
-                                            // For now, let's just show an alert or handle it if we have the logic
                                             alert("To delete this set, please go to the Dashboard.");
                                         }
                                     }
                                 ]}
-                                className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg h-12 w-12 flex items-center justify-center"
+                                className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg h-10 w-10 flex items-center justify-center"
                                 triggerIcon="more_vert"
                             />
                             <button
                                 onClick={() => setIsAddWordModalOpen(true)}
-                                className="flex w-full sm:w-auto min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-12 px-5 bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-white gap-2 text-base font-bold leading-normal tracking-[0.015em] hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors"
+                                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-white rounded-lg font-bold hover:opacity-90 transition-opacity text-sm"
                             >
-                                <span className="material-symbols-outlined text-xl">add</span>
-                                <span className="truncate">Add Word</span>
-                            </button>
-                            <button
-                                onClick={handleGenerateQuiz}
-                                disabled={isGeneratingQuiz || words.length === 0}
-                                className="flex w-full sm:w-auto min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-12 px-5 bg-primary text-white gap-2 pl-5 text-base font-bold leading-normal tracking-[0.015em] hover:opacity-90 transition-opacity disabled:opacity-50"
-                            >
-                                {isGeneratingQuiz ? (
-                                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                ) : (
-                                    <span className="material-symbols-outlined text-white text-xl">auto_awesome</span>
-                                )}
-                                <span className="truncate">{isGeneratingQuiz ? 'Generating...' : 'Generate quiz with AI'}</span>
+                                <span className="material-symbols-outlined text-lg">add</span>
+                                <span>Add Word</span>
                             </button>
                         </div>
                     </div>
@@ -303,36 +256,7 @@ const SetDetailsPage: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Quiz Modal */}
-                {showQuizModal && quizQuestions && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
-                        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
-                            <div className="flex justify-between items-center mb-6">
-                                <h2 className="text-2xl font-bold text-slate-900 dark:text-white">AI Generated Quiz</h2>
-                                <button onClick={() => setShowQuizModal(false)} className="text-slate-500 hover:text-slate-800 dark:hover:text-white">
-                                    <span className="material-symbols-outlined">close</span>
-                                </button>
-                            </div>
-                            <div className="space-y-6">
-                                {quizQuestions.map((q, idx) => (
-                                    <div key={idx} className="p-4 border border-slate-200 dark:border-slate-700 rounded-xl">
-                                        <p className="font-medium text-lg mb-3 text-slate-900 dark:text-white">{idx + 1}. {q.question}</p>
-                                        <div className="space-y-2">
-                                            {q.options.map((opt, oIdx) => (
-                                                <div key={oIdx} className={`p-2 rounded border ${opt === q.correctAnswer ? 'border-green-500 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300' : 'border-slate-200 dark:border-slate-700'}`}>
-                                                    {opt} {opt === q.correctAnswer && '(Correct)'}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                            <div className="mt-6 flex justify-end">
-                                <button onClick={() => setShowQuizModal(false)} className="bg-primary text-white px-4 py-2 rounded-lg hover:opacity-90 font-medium">Close</button>
-                            </div>
-                        </div>
-                    </div>
-                )}
+
 
                 <AddWordModal
                     isOpen={isAddWordModalOpen}

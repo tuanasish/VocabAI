@@ -12,6 +12,7 @@ import EditSetModal from '../components/EditSetModal';
 import DueWordsWidget from '../components/DueWordsWidget';
 import { progressApi, SetProgress } from '../lib/api/progressApi';
 import ActionMenu from '../components/ActionMenu';
+import { useProfile } from '../hooks/useProfile';
 
 type VocabularySet = Database['public']['Tables']['vocabulary_sets']['Row'] & {
   words: { count: number }[];
@@ -19,6 +20,7 @@ type VocabularySet = Database['public']['Tables']['vocabulary_sets']['Row'] & {
 
 const Dashboard: React.FC = () => {
   const { user } = useAuth();
+  const { profile, loading: profileLoading } = useProfile();
   // Use custom hook instead of manual state management
   const { sets, loading, fetchSets, deleteSet: deleteSetApi, updateSet } = useVocabularySets();
 
@@ -197,23 +199,49 @@ const Dashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <div className="flex flex-col gap-2 rounded-xl p-6 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-[0_0_12px_rgba(0,0,0,0.02)]">
-                <p className="text-slate-500 dark:text-slate-400 text-base font-medium leading-normal">Today's Goal</p>
-                <p className="text-[#0d171b] dark:text-slate-50 tracking-light text-3xl font-bold leading-tight">{userStats.currentProgress}/{userStats.dailyGoal} Words</p>
-                <div className="flex flex-col gap-2 pt-2">
-                  <div className="flex gap-6 justify-end"><p className="text-slate-500 dark:text-slate-400 text-sm font-normal leading-normal">70%</p></div>
-                  <div className="rounded-full bg-slate-200 dark:bg-slate-700 w-full"><div className="h-2 rounded-full bg-[#50E3C2]" style={{ width: '70%' }}></div></div>
+            {/* Gamification Stats Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+              {/* Level Card */}
+              <div className="flex flex-col gap-3 rounded-xl p-6 border border-slate-200 dark:border-slate-800 bg-gradient-to-br from-purple-50 to-white dark:from-purple-900/20 dark:to-slate-900 shadow-[0_0_12px_rgba(0,0,0,0.02)]">
+                <div className="flex items-center justify-between">
+                  <p className="text-slate-600 dark:text-slate-300 text-sm font-semibold uppercase tracking-wide">Level</p>
+                  <span className="material-symbols-outlined text-purple-500 text-2xl">military_tech</span>
+                </div>
+                <p className="text-slate-900 dark:text-slate-50 text-4xl font-black">{profile?.level || 1}</p>
+                <div className="flex flex-col gap-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-500 dark:text-slate-400">{profile?.xp || 0} XP</span>
+                    <span className="text-slate-500 dark:text-slate-400">{((profile?.level || 1) * 100)} XP</span>
+                  </div>
+                  <div className="rounded-full bg-slate-200 dark:bg-slate-700 h-2 w-full overflow-hidden">
+                    <div className="h-2 rounded-full bg-gradient-to-r from-purple-500 to-pink-500" style={{ width: `${((profile?.xp || 0) % 100)}%` }}></div>
+                  </div>
                 </div>
               </div>
-              <div className="flex flex-col gap-2 rounded-xl p-6 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-[0_0_12px_rgba(0,0,0,0.02)]">
-                <p className="text-slate-500 dark:text-slate-400 text-base font-medium leading-normal">Words Learned</p>
-                <p className="text-[#0d171b] dark:text-slate-50 tracking-light text-3xl font-bold leading-tight">{userStats.wordsLearned}</p>
+
+              {/* XP Card */}
+              <div className="flex flex-col gap-3 rounded-xl p-6 border border-slate-200 dark:border-slate-800 bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/20 dark:to-slate-900 shadow-[0_0_12px_rgba(0,0,0,0.02)]">
+                <div className="flex items-center justify-between">
+                  <p className="text-slate-600 dark:text-slate-300 text-sm font-semibold uppercase tracking-wide">Total XP</p>
+                  <span className="material-symbols-outlined text-blue-500 text-2xl">stars</span>
+                </div>
+                <p className="text-slate-900 dark:text-slate-50 text-4xl font-black">{profile?.xp || 0}</p>
+                <p className="text-slate-500 dark:text-slate-400 text-xs">Keep learning to earn more!</p>
               </div>
-              <div className="flex flex-col sm:col-span-2 gap-2 rounded-xl p-6 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-[0_0_12px_rgba(0,0,0,0.02)]">
-                <p className="text-slate-500 dark:text-slate-400 text-base font-medium leading-normal">Quiz Accuracy</p>
-                <p className="text-[#0d171b] dark:text-slate-50 tracking-light text-3xl font-bold leading-tight">{userStats.quizAccuracy}%</p>
+
+              {/* Streak Card */}
+              <div className="flex flex-col gap-3 rounded-xl p-6 border border-slate-200 dark:border-slate-800 bg-gradient-to-br from-orange-50 to-white dark:from-orange-900/20 dark:to-slate-900 shadow-[0_0_12px_rgba(0,0,0,0.02)]">
+                <div className="flex items-center justify-between">
+                  <p className="text-slate-600 dark:text-slate-300 text-sm font-semibold uppercase tracking-wide">Streak</p>
+                  <span className="material-symbols-outlined text-orange-500 text-2xl">local_fire_department</span>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <p className="text-slate-900 dark:text-slate-50 text-4xl font-black">{profile?.streak_days || 0}</p>
+                  <span className="text-slate-500 dark:text-slate-400 text-lg font-medium">days</span>
+                </div>
+                <p className="text-slate-500 dark:text-slate-400 text-xs">
+                  {profile?.streak_days && profile.streak_days > 0 ? "Don't break the chain!" : "Start your streak today!"}
+                </p>
               </div>
             </div>
           </div>

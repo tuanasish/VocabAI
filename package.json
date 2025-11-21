@@ -10,7 +10,7 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@google/genai": "^1.30.0",
+    "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.83.0",
     "date-fns": "^4.1.0",
     "react": "^19.2.0",

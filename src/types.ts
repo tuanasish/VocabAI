@@ -31,3 +31,26 @@ export interface QuizQuestion {
   options: string[];
   correctAnswer: string;
 }
+
+export type GeneratedWord = {
+  word: string;
+  phonetic: string;
+  type: string;
+  meaning: string;
+  example: string;
+};
+
+export type GeneratedSet = {
+  title: string;
+  description: string;
+  category: string;
+  level: string;
+  icon: string;
+  words: GeneratedWord[];
+};
+
+export type RoleplayScenario = {
+  persona: string;
+  scenario: string;
+  initialMessage: string;
+};

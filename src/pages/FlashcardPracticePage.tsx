@@ -4,6 +4,9 @@ import Layout from '../components/Layout';
 import { useSpeech } from '../hooks/useSpeech';
 import { supabase } from '../lib/supabaseClient';
 import { Database } from '../types/supabase';
+import { ReviewQuality, updateWordProgress } from '../lib/srs';
+import { awardXP, updateStreak, XP_REWARDS } from '../lib/gamification';
+import { useAuth } from '../contexts/AuthContext';
 
 type Word = Database['public']['Tables']['words']['Row'];
 type VocabularySet = Database['public']['Tables']['vocabulary_sets']['Row'];
@@ -11,6 +14,7 @@ type VocabularySet = Database['public']['Tables']['vocabulary_sets']['Row'];
 const FlashcardPracticePage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [set, setSet] = useState<VocabularySet | null>(null);
   const [words, setWords] = useState<Word[]>([]);
   const [loading, setLoading] = useState(true);
@@ -19,6 +23,11 @@ const FlashcardPracticePage: React.FC = () => {
   const [showResults, setShowResults] = useState(false);
   const [correctCount, setCorrectCount] = useState(0);
   const [wrongCount, setWrongCount] = useState(0);
+  const [useSRS, setUseSRS] = useState(true); // Toggle between SRS and simple mode
+
+  const [isShuffle, setIsShuffle] = useState(false);
+  const [autoPlay, setAutoPlay] = useState(true);
+  const [originalWords, setOriginalWords] = useState<Word[]>([]);
   const { speak } = useSpeech();
 
   useEffect(() => {
@@ -46,7 +55,9 @@ const FlashcardPracticePage: React.FC = () => {
           .order('created_at', { ascending: true });
 
         if (wordsError) throw wordsError;
+
         setWords(wordsData || []);
+        setOriginalWords(wordsData || []);
         setCurrentIndex(0);
         setIsFlipped(false);
         setShowResults(false);
@@ -63,6 +74,100 @@ const FlashcardPracticePage: React.FC = () => {
 
     fetchData();
   }, [id, navigate]);
+
+  const currentWord = words[currentIndex];
+
+  const toggleShuffle = () => {
+    if (isShuffle) {
+      // Restore original order
+      setWords([...originalWords]);
+      setIsShuffle(false);
+    } else {
+      // Shuffle words
+      const shuffled = [...words].sort(() => Math.random() - 0.5);
+      setWords(shuffled);
+      setIsShuffle(true);
+    }
+    setCurrentIndex(0);
+    setIsFlipped(false);
+  };
+
+  const handleSRSRating = useCallback(async (quality: ReviewQuality) => {
+    if (!set || !user) return;
+
+    const currentWord = words[currentIndex];
+
+    try {
+      // Update word progress using SM-2
+      await updateWordProgress(user.id, currentWord.id, quality);
+
+      // Award XP based on quality
+      if (quality >= ReviewQuality.GOOD) {
+        await awardXP(user.id, XP_REWARDS.WORD_LEARNED);
+        setCorrectCount(prev => prev + 1);
+      } else {
+        setWrongCount(prev => prev + 1);
+      }
+
+      // Update streak
+      await updateStreak(user.id);
+    } catch (error) {
+      console.error('Error updating progress:', error);
+    }
+
+    setIsFlipped(false);
+
+    if (currentIndex < words.length - 1) {
+      setCurrentIndex(prev => prev + 1);
+    } else {
+      setShowResults(true);
+      // Award session completion XP
+      if (user) {
+        await awardXP(user.id, XP_REWARDS.FLASHCARD_SESSION);
+      }
+    }
+  }, [currentIndex, set, words, user]);
+
+  const handleNext = useCallback((known: boolean) => {
+    if (!set) return;
+
+    if (known) {
+      setCorrectCount(prev => prev + 1);
+    } else {
+      setWrongCount(prev => prev + 1);
+    }
+    setIsFlipped(false);
+
+    if (currentIndex < words.length - 1) {
+      setCurrentIndex(prev => prev + 1);
+    } else {
+      setShowResults(true);
+    }
+  }, [currentIndex, set, words.length]);
+
+  // Auto-play audio when flipping to back
+  useEffect(() => {
+    if (isFlipped && currentWord && autoPlay) {
+      speak(currentWord.word);
+    }
+  }, [isFlipped, currentWord, speak, autoPlay]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        e.preventDefault(); // Prevent scrolling
+        setIsFlipped(prev => !prev);
+      } else if (e.code === 'ArrowRight') {
+        handleNext(true);
+      } else if (e.code === 'ArrowLeft') {
+        handleNext(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleNext]);
 
   if (loading) {
     return (
@@ -87,48 +192,10 @@ const FlashcardPracticePage: React.FC = () => {
     );
   }
 
-  const currentWord = words[currentIndex];
-
-  // Auto-play audio when flipping to back (optional, good for learning)
-  useEffect(() => {
-    if (isFlipped && currentWord) {
-      speak(currentWord.word);
-    }
-  }, [isFlipped, currentWord, speak]);
-
-  const handleNext = useCallback((known: boolean) => {
-    if (!set) return;
-
-    if (known) {
-      setCorrectCount(prev => prev + 1);
-    } else {
-      setWrongCount(prev => prev + 1);
-    }
-    setIsFlipped(false);
-
-    if (currentIndex < words.length - 1) {
-      setCurrentIndex(prev => prev + 1);
-    } else {
-      setShowResults(true);
-    }
-  }, [currentIndex, set, words.length]);
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space') {
-        e.preventDefault(); // Prevent scrolling
-        setIsFlipped(prev => !prev);
-      } else if (e.code === 'ArrowRight') {
-        handleNext(true);
-      } else if (e.code === 'ArrowLeft') {
-        handleNext(false);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleNext]);
+  if (!currentWord) {
+    console.error("Current word is undefined", { currentIndex, wordsLength: words.length });
+    return <div>Error: Word not found</div>;
+  }
 
   if (showResults) {
     return (
@@ -177,7 +244,8 @@ const FlashcardPracticePage: React.FC = () => {
   const progress = ((currentIndex + 1) / words.length) * 100;
 
   return (
-    <div className="flex min-h-screen w-full flex-col bg-background-light dark:bg-background-dark text-slate-800 dark:text-slate-200 font-display transition-colors duration-300">\n      {/* Header / Toolbar */}
+    <div className="flex min-h-screen w-full flex-col bg-background-light dark:bg-background-dark text-slate-800 dark:text-slate-200 font-display transition-colors duration-300">
+      {/* Header / Toolbar */}
       <header className="flex justify-center w-full bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10">
         <div className="flex justify-between items-center gap-2 px-4 sm:px-6 lg:px-8 py-3 w-full max-w-5xl">
           <div className="flex items-center gap-2">
@@ -192,6 +260,20 @@ const FlashcardPracticePage: React.FC = () => {
               <span className="flex items-center gap-1"><kbd className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">←</kbd> Don't Know</span>
               <span className="flex items-center gap-1"><kbd className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">→</kbd> Know</span>
             </div>
+            <button
+              onClick={() => setAutoPlay(!autoPlay)}
+              className={`p-2 rounded-full transition-colors ${autoPlay ? 'text-primary bg-primary/10' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
+              title={autoPlay ? "Auto-play On" : "Auto-play Off"}
+            >
+              <span className="material-symbols-outlined">{autoPlay ? 'volume_up' : 'volume_off'}</span>
+            </button>
+            <button
+              onClick={toggleShuffle}
+              className={`p-2 rounded-full transition-colors ${isShuffle ? 'text-primary bg-primary/10' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
+              title={isShuffle ? "Shuffle On" : "Shuffle Off"}
+            >
+              <span className="material-symbols-outlined">shuffle</span>
+            </button>
             <button className="p-2 text-slate-700 dark:text-slate-300 hover:text-primary dark:hover:text-primary rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
               <span className="material-symbols-outlined">settings</span>
             </button>
@@ -216,7 +298,7 @@ const FlashcardPracticePage: React.FC = () => {
           {/* Flashcard Container */}
           <div className="flex-grow flex items-center justify-center p-4 perspective-1000">
             <div
-              className={`w - full max - w - 2xl aspect - [3 / 2] relative transition - all duration - 500 transform - style - 3d cursor - pointer group ${isFlipped ? 'rotate-y-180' : ''} `}
+              className={`w-full max-w-2xl aspect-[3/2] relative transition-all duration-500 transform-style-3d cursor-pointer group ${isFlipped ? 'rotate-y-180' : ''} `}
               onClick={() => setIsFlipped(!isFlipped)}
               style={{ transformStyle: 'preserve-3d', transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)' }}
             >
@@ -277,26 +359,61 @@ const FlashcardPracticePage: React.FC = () => {
 
           {/* Controls */}
           <div className="flex flex-col items-center gap-6 pb-8 pt-2">
-            <div className="flex gap-4 w-full max-w-md justify-center">
-              <button
-                onClick={() => handleNext(false)}
-                className="flex-1 group flex cursor-pointer items-center justify-center rounded-2xl h-16 px-6 bg-white dark:bg-slate-800 border-2 border-orange-100 dark:border-slate-700 hover:border-orange-400 dark:hover:border-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-all duration-200 shadow-sm hover:shadow-md"
-              >
-                <div className="flex flex-col items-center">
-                  <span className="text-orange-500 dark:text-orange-400 text-lg font-bold group-hover:scale-105 transition-transform">Still learning</span>
-                  <span className="text-xs text-slate-400 font-medium">Key: ←</span>
-                </div>
-              </button>
-              <button
-                onClick={() => handleNext(true)}
-                className="flex-1 group flex cursor-pointer items-center justify-center rounded-2xl h-16 px-6 bg-[#7ED321] hover:bg-[#71BD1D] text-white transition-all duration-200 shadow-lg shadow-green-200 dark:shadow-none hover:shadow-xl hover:-translate-y-0.5"
-              >
-                <div className="flex flex-col items-center">
-                  <span className="text-lg font-bold group-hover:scale-105 transition-transform">I know this</span>
-                  <span className="text-xs text-green-100 font-medium">Key: →</span>
-                </div>
-              </button>
-            </div>
+            {useSRS && isFlipped ? (
+              /* SRS Rating Buttons */
+              <div className="flex gap-3 w-full max-w-3xl justify-center">
+                <button
+                  onClick={() => handleSRSRating(ReviewQuality.AGAIN)}
+                  className="flex-1 group flex flex-col cursor-pointer items-center justify-center rounded-xl h-20 px-4 bg-white dark:bg-slate-800 border-2 border-red-200 dark:border-red-900/50 hover:border-red-400 dark:hover:border-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all duration-200 shadow-sm hover:shadow-md"
+                >
+                  <span className="text-red-500 dark:text-red-400 text-base font-bold">Again</span>
+                  <span className="text-xs text-slate-400 mt-1">&lt;1 day</span>
+                </button>
+                <button
+                  onClick={() => handleSRSRating(ReviewQuality.HARD)}
+                  className="flex-1 group flex flex-col cursor-pointer items-center justify-center rounded-xl h-20 px-4 bg-white dark:bg-slate-800 border-2 border-orange-200 dark:border-orange-900/50 hover:border-orange-400 dark:hover:border-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-all duration-200 shadow-sm hover:shadow-md"
+                >
+                  <span className="text-orange-500 dark:text-orange-400 text-base font-bold">Hard</span>
+                  <span className="text-xs text-slate-400 mt-1">1 day</span>
+                </button>
+                <button
+                  onClick={() => handleSRSRating(ReviewQuality.GOOD)}
+                  className="flex-1 group flex flex-col cursor-pointer items-center justify-center rounded-xl h-20 px-4 bg-white dark:bg-slate-800 border-2 border-blue-200 dark:border-blue-900/50 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all duration-200 shadow-sm hover:shadow-md"
+                >
+                  <span className="text-blue-500 dark:text-blue-400 text-base font-bold">Good</span>
+                  <span className="text-xs text-slate-400 mt-1">3-6 days</span>
+                </button>
+                <button
+                  onClick={() => handleSRSRating(ReviewQuality.EASY)}
+                  className="flex-1 group flex flex-col cursor-pointer items-center justify-center rounded-xl h-20 px-4 bg-[#7ED321] hover:bg-[#71BD1D] text-white transition-all duration-200 shadow-lg shadow-green-200 dark:shadow-none hover:shadow-xl hover:-translate-y-0.5"
+                >
+                  <span className="text-base font-bold">Easy</span>
+                  <span className="text-xs text-green-100 mt-1">6+ days</span>
+                </button>
+              </div>
+            ) : (
+              /* Simple Know/Don't Know Buttons */
+              <div className="flex gap-4 w-full max-w-md justify-center">
+                <button
+                  onClick={() => handleNext(false)}
+                  className="flex-1 group flex cursor-pointer items-center justify-center rounded-2xl h-16 px-6 bg-white dark:bg-slate-800 border-2 border-orange-100 dark:border-slate-700 hover:border-orange-400 dark:hover:border-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-all duration-200 shadow-sm hover:shadow-md"
+                >
+                  <div className="flex flex-col items-center">
+                    <span className="text-orange-500 dark:text-orange-400 text-lg font-bold group-hover:scale-105 transition-transform">Still learning</span>
+                    <span className="text-xs text-slate-400 font-medium">Key: ←</span>
+                  </div>
+                </button>
+                <button
+                  onClick={() => handleNext(true)}
+                  className="flex-1 group flex cursor-pointer items-center justify-center rounded-2xl h-16 px-6 bg-[#7ED321] hover:bg-[#71BD1D] text-white transition-all duration-200 shadow-lg shadow-green-200 dark:shadow-none hover:shadow-xl hover:-translate-y-0.5"
+                >
+                  <div className="flex flex-col items-center">
+                    <span className="text-lg font-bold group-hover:scale-105 transition-transform">I know this</span>
+                    <span className="text-xs text-green-100 font-medium">Key: →</span>
+                  </div>
+                </button>
+              </div>
+            )}
           </div>
 
         </div>
