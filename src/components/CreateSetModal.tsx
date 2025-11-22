@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
+import toast from 'react-hot-toast';
 
 interface CreateSetModalProps {
     isOpen: boolean;
@@ -14,7 +15,11 @@ const CreateSetModal: React.FC<CreateSetModalProps> = ({ isOpen, onClose, onSetC
     const [description, setDescription] = useState('');
     const [category, setCategory] = useState('General');
     const [level, setLevel] = useState('Beginner');
+    const [imageUrl, setImageUrl] = useState('');
+    const [isPublic, setIsPublic] = useState(false);
     const [loading, setLoading] = useState(false);
+
+    const isAdmin = user?.email === 'tuanasishh@gmail.com';
 
     if (!isOpen) return null;
 
@@ -22,27 +27,43 @@ const CreateSetModal: React.FC<CreateSetModalProps> = ({ isOpen, onClose, onSetC
         e.preventDefault();
         if (!user) return;
 
+        // Client-side validation with toast
+        if (!title.trim()) {
+            toast.error('Please enter a title for your vocabulary set');
+            return;
+        }
+
+        if (title.trim().length < 3) {
+            toast.error('Title must be at least 3 characters long');
+            return;
+        }
+
         setLoading(true);
         try {
             const { error } = await supabase.from('vocabulary_sets').insert({
-                title,
-                description,
+                title: title.trim(),
+                description: description.trim(),
                 category,
                 level,
                 user_id: user.id,
                 icon: 'school', // Default icon for now
-                color_class: 'bg-blue-100 text-blue-700' // Default color
+                color_class: 'bg-blue-100 text-blue-700', // Default color
+                image_url: imageUrl.trim() || null,
+                is_public: isAdmin ? isPublic : false
             });
 
             if (error) throw error;
 
+            toast.success('Vocabulary set created successfully!');
             onSetCreated();
             onClose();
             setTitle('');
             setDescription('');
+            setImageUrl('');
+            setIsPublic(false);
         } catch (error) {
             console.error('Error creating set:', error);
-            alert('Failed to create set');
+            toast.error('Failed to create set');
         } finally {
             setLoading(false);
         }
@@ -50,7 +71,7 @@ const CreateSetModal: React.FC<CreateSetModalProps> = ({ isOpen, onClose, onSetC
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="w-full max-w-md rounded-xl bg-white dark:bg-slate-900 p-6 shadow-xl ring-1 ring-slate-200 dark:ring-slate-800">
+            <div className="w-full max-w-md rounded-xl bg-white dark:bg-slate-900 p-6 shadow-xl ring-1 ring-slate-200 dark:ring-slate-800 max-h-[90vh] overflow-y-auto">
                 <div className="flex items-center justify-between mb-6">
                     <h2 className="text-xl font-bold text-slate-900 dark:text-white">Create New Set</h2>
                     <button onClick={onClose} className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">
@@ -67,7 +88,6 @@ const CreateSetModal: React.FC<CreateSetModalProps> = ({ isOpen, onClose, onSetC
                             onChange={(e) => setTitle(e.target.value)}
                             placeholder="e.g., IELTS Unit 1"
                             className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/50"
-                            required
                         />
                     </label>
 
@@ -78,6 +98,17 @@ const CreateSetModal: React.FC<CreateSetModalProps> = ({ isOpen, onClose, onSetC
                             onChange={(e) => setDescription(e.target.value)}
                             placeholder="What is this set about?"
                             className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/50 min-h-[80px]"
+                        />
+                    </label>
+
+                    <label className="flex flex-col gap-1.5">
+                        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Cover Image URL (Optional)</span>
+                        <input
+                            type="url"
+                            value={imageUrl}
+                            onChange={(e) => setImageUrl(e.target.value)}
+                            placeholder="https://example.com/image.jpg"
+                            className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/50"
                         />
                     </label>
 
@@ -110,6 +141,21 @@ const CreateSetModal: React.FC<CreateSetModalProps> = ({ isOpen, onClose, onSetC
                             </select>
                         </label>
                     </div>
+
+                    {isAdmin && (
+                        <label className="flex items-center gap-2 mt-2 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+                            <input
+                                type="checkbox"
+                                checked={isPublic}
+                                onChange={(e) => setIsPublic(e.target.checked)}
+                                className="rounded border-slate-300 text-primary focus:ring-primary w-4 h-4"
+                            />
+                            <div className="flex flex-col">
+                                <span className="text-sm font-medium text-slate-900 dark:text-white">Make Public?</span>
+                                <span className="text-xs text-slate-500">Public sets appear on the Explore page</span>
+                            </div>
+                        </label>
+                    )}
 
                     <div className="flex justify-end gap-3 mt-4">
                         <button

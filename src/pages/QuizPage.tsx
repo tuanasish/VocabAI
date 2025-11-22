@@ -7,6 +7,7 @@ import { generateQuiz } from '../lib/aiGenerator';
 import { QuizQuestion } from '../types';
 import { awardXP, updateStreak, XP_REWARDS } from '../lib/gamification';
 import { useAuth } from '../contexts/AuthContext';
+import { useSound } from '../hooks/useSound';
 
 type VocabularySet = Database['public']['Tables']['vocabulary_sets']['Row'];
 type Word = Database['public']['Tables']['words']['Row'];
@@ -17,6 +18,7 @@ const QuizPage: React.FC = () => {
     const modeParam = searchParams.get('mode');
     const navigate = useNavigate();
     const { user } = useAuth();
+    const sound = useSound();
 
     const [set, setSet] = useState<VocabularySet | null>(null);
     const [questions, setQuestions] = useState<QuizQuestion[]>([]);
@@ -112,8 +114,14 @@ const QuizPage: React.FC = () => {
         if (selectedAnswer) return; // Prevent changing answer
         setSelectedAnswer(option);
 
-        if (option === questions[currentQuestionIndex].correctAnswer) {
+        const isCorrect = option === questions[currentQuestionIndex].correctAnswer;
+
+        // Play sound effect
+        if (isCorrect) {
+            sound.play.correct();
             setScore(prev => prev + 1);
+        } else {
+            sound.play.wrong();
         }
 
         // Auto advance after delay
@@ -123,14 +131,19 @@ const QuizPage: React.FC = () => {
                 setSelectedAnswer(null);
             } else {
                 setShowResults(true);
+                sound.play.complete();
+
                 // Award XP when quiz is completed
                 if (user) {
-                    const finalScore = option === questions[currentQuestionIndex].correctAnswer ? score + 1 : score;
+                    const finalScore = isCorrect ? score + 1 : score;
                     const isPerfect = finalScore === questions.length;
 
                     await awardXP(user.id, XP_REWARDS.QUIZ_COMPLETED);
                     if (isPerfect) {
                         await awardXP(user.id, XP_REWARDS.QUIZ_PERFECT);
+                        sound.play.levelUp();
+                    } else {
+                        sound.play.xpGain();
                     }
                     await updateStreak(user.id);
                 }

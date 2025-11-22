@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { generateVocabularySet, GeneratedWord } from '../lib/aiGenerator';
+import toast from 'react-hot-toast';
 
 interface GenerateSetModalProps {
     isOpen: boolean;
@@ -26,7 +27,7 @@ const GenerateSetModal: React.FC<GenerateSetModalProps> = ({ isOpen, onClose, on
 
     const handleGenerate = async () => {
         if (!topic.trim()) {
-            alert('Please enter a topic');
+            toast.error('Please enter a topic');
             return;
         }
 
@@ -40,7 +41,7 @@ const GenerateSetModal: React.FC<GenerateSetModalProps> = ({ isOpen, onClose, on
             setGeneratedIcon(result.icon || 'auto_awesome');
         } catch (error) {
             console.error('Error generating set:', error);
-            alert('Failed to generate vocabulary set. Please try again.');
+            toast.error('Failed to generate vocabulary set. Please try again.');
         } finally {
             setGenerating(false);
         }
@@ -89,7 +90,7 @@ const GenerateSetModal: React.FC<GenerateSetModalProps> = ({ isOpen, onClose, on
             handleClose();
         } catch (error) {
             console.error('Error saving set:', error);
-            alert('Failed to save vocabulary set');
+            toast.error('Failed to save vocabulary set');
         } finally {
             setSaving(false);
         }

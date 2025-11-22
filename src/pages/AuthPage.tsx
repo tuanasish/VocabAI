@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
+import toast from 'react-hot-toast';
 
 const AuthPage: React.FC = () => {
   const [isLogin, setIsLogin] = useState(false);
@@ -44,7 +45,7 @@ const AuthPage: React.FC = () => {
           },
         });
         if (error) throw error;
-        alert('Registration successful! Please check your email to verify your account.');
+        toast.success('Registration successful! Please check your email to verify your account.');
         setIsLogin(true);
       }
     } catch (err: any) {

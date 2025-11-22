@@ -9,6 +9,7 @@ import { RoleplayScenario } from '../types';
 import { useSpeech } from '../hooks/useSpeech';
 import { awardXP, updateStreak, XP_REWARDS } from '../lib/gamification';
 import { useAuth } from '../contexts/AuthContext';
+import toast from 'react-hot-toast';
 
 type VocabularySet = Database['public']['Tables']['vocabulary_sets']['Row'];
 type Word = Database['public']['Tables']['words']['Row'];
@@ -69,7 +70,11 @@ const RoleplayPage: React.FC = () => {
 
                 // Generate Scenario
                 if (setData && wordsData && wordsData.length > 0) {
-                    const generatedScenario = await generateRoleplayScenario(setData.title, wordsData);
+                    const mappedWords = wordsData.map(w => ({
+                        word: w.word,
+                        meaning: w.definition
+                    }));
+                    const generatedScenario = await generateRoleplayScenario(setData.title, mappedWords);
                     setScenario(generatedScenario);
 
                     // Initialize Chat Session
@@ -100,7 +105,7 @@ const RoleplayPage: React.FC = () => {
 
             } catch (error) {
                 console.error("Error initializing roleplay:", error);
-                alert("Failed to load roleplay. Please try again.");
+                toast.error("Failed to load roleplay. Please try again.");
             } finally {
                 setIsLoading(false);
             }
@@ -155,7 +160,7 @@ const RoleplayPage: React.FC = () => {
 
         } catch (error) {
             console.error("Error sending message:", error);
-            alert("Failed to send message. Please try again.");
+            toast.error("Failed to send message. Please try again.");
         } finally {
             setIsSending(false);
         }

@@ -20,8 +20,11 @@ const EditSetModal: React.FC<EditSetModalProps> = ({ isOpen, set, onClose, onSet
     const [category, setCategory] = useState('General');
     const [level, setLevel] = useState('Beginner');
     const [topic, setTopic] = useState('');
+    const [imageUrl, setImageUrl] = useState('');
     const [isPublic, setIsPublic] = useState(false);
     const [loading, setLoading] = useState(false);
+
+    const isAdmin = user?.email === 'tuanasishh@gmail.com';
 
     useEffect(() => {
         if (set) {
@@ -30,6 +33,7 @@ const EditSetModal: React.FC<EditSetModalProps> = ({ isOpen, set, onClose, onSet
             setCategory(set.category || 'General');
             setLevel(set.level || 'Beginner');
             setTopic(set.topic || '');
+            setImageUrl(set.image_url || '');
             setIsPublic(set.is_public || false);
         }
     }, [set]);
@@ -42,14 +46,21 @@ const EditSetModal: React.FC<EditSetModalProps> = ({ isOpen, set, onClose, onSet
 
         setLoading(true);
         try {
-            await onUpdate(set.id, {
+            const updates: any = {
                 title,
                 description,
                 category,
                 level,
                 topic,
-                is_public: isPublic
-            });
+                image_url: imageUrl.trim() || null
+            };
+
+            // Only update is_public if user is admin
+            if (isAdmin) {
+                updates.is_public = isPublic;
+            }
+
+            await onUpdate(set.id, updates);
 
             onSetUpdated();
             onClose();
@@ -63,7 +74,7 @@ const EditSetModal: React.FC<EditSetModalProps> = ({ isOpen, set, onClose, onSet
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="w-full max-w-md rounded-xl bg-white dark:bg-slate-900 p-6 shadow-xl ring-1 ring-slate-200 dark:ring-slate-800">
+            <div className="w-full max-w-md rounded-xl bg-white dark:bg-slate-900 p-6 shadow-xl ring-1 ring-slate-200 dark:ring-slate-800 max-h-[90vh] overflow-y-auto">
                 <div className="flex items-center justify-between mb-6">
                     <h2 className="text-xl font-bold text-slate-900 dark:text-white">Edit Vocabulary Set</h2>
                     <button onClick={onClose} className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">
@@ -105,6 +116,17 @@ const EditSetModal: React.FC<EditSetModalProps> = ({ isOpen, set, onClose, onSet
                         />
                     </label>
 
+                    <label className="flex flex-col gap-1.5">
+                        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Cover Image URL (Optional)</span>
+                        <input
+                            type="url"
+                            value={imageUrl}
+                            onChange={(e) => setImageUrl(e.target.value)}
+                            placeholder="https://example.com/image.jpg"
+                            className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/50"
+                        />
+                    </label>
+
                     <div className="grid grid-cols-2 gap-4">
                         <label className="flex flex-col gap-1.5">
                             <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Category</span>
@@ -135,15 +157,20 @@ const EditSetModal: React.FC<EditSetModalProps> = ({ isOpen, set, onClose, onSet
                         </label>
                     </div>
 
-                    <label className="flex items-center gap-2 mt-2">
-                        <input
-                            type="checkbox"
-                            checked={isPublic}
-                            onChange={(e) => setIsPublic(e.target.checked)}
-                            className="rounded border-slate-300 text-primary focus:ring-primary"
-                        />
-                        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Make Public?</span>
-                    </label>
+                    {isAdmin && (
+                        <label className="flex items-center gap-2 mt-2 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+                            <input
+                                type="checkbox"
+                                checked={isPublic}
+                                onChange={(e) => setIsPublic(e.target.checked)}
+                                className="rounded border-slate-300 text-primary focus:ring-primary w-4 h-4"
+                            />
+                            <div className="flex flex-col">
+                                <span className="text-sm font-medium text-slate-900 dark:text-white">Make Public?</span>
+                                <span className="text-xs text-slate-500">Public sets appear on the Explore page</span>
+                            </div>
+                        </label>
+                    )}
 
                     <div className="flex justify-end gap-3 mt-4">
                         <button

@@ -1,6 +1,7 @@
-import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { currentUser } from '../data';
+import React, { useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import { useProfile } from '../hooks/useProfile';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -9,10 +10,20 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children, hideHeader = false }) => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { signOut, user } = useAuth();
+  const { profile } = useProfile();
   const isLanding = location.pathname === '/';
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+
+  const handleLogout = async () => {
+    await signOut();
+    navigate('/auth');
+  };
 
   // Different themes for Landing vs App
-  const navLinkClass = isLanding 
+  const navLinkClass = isLanding
     ? "text-sm font-medium leading-normal text-slate-800 dark:text-slate-300 hover:text-primary dark:hover:text-primary transition-colors"
     : "text-slate-700 dark:text-slate-300 hover:text-primary dark:hover:text-primary text-sm font-medium leading-normal";
 
@@ -23,7 +34,7 @@ const Layout: React.FC<LayoutProps> = ({ children, hideHeader = false }) => {
       <div className="layout-container flex h-full grow flex-col">
         {!hideHeader && (
           <div className="sticky top-0 z-50 bg-white/80 dark:bg-background-dark/80 backdrop-blur-sm border-b border-slate-200 dark:border-slate-800">
-             <div className="px-4 md:px-10 lg:px-20 xl:px-40 flex justify-center">
+            <div className="px-4 md:px-10 lg:px-20 xl:px-40 flex justify-center">
               <div className="layout-content-container flex flex-col max-w-[1200px] flex-1">
                 <header className="flex items-center justify-between whitespace-nowrap px-4 sm:px-10 py-3">
                   <Link to="/" className="flex items-center gap-4 text-slate-900 dark:text-slate-50">
@@ -36,7 +47,7 @@ const Layout: React.FC<LayoutProps> = ({ children, hideHeader = false }) => {
                   </Link>
 
                   {isLanding ? (
-                     <div className="flex flex-1 justify-end gap-8">
+                    <div className="flex flex-1 justify-end gap-8">
                       <div className="hidden md:flex items-center gap-9">
                         <a className={navLinkClass} href="#features">Features</a>
                         <a className={navLinkClass} href="#pricing">Pricing</a>
@@ -57,21 +68,118 @@ const Layout: React.FC<LayoutProps> = ({ children, hideHeader = false }) => {
                           <Link to="/dashboard" className={location.pathname === '/dashboard' ? activeNavLinkClass : navLinkClass}>Dashboard</Link>
                           <Link to="/explore" className={location.pathname === '/explore' || location.pathname.startsWith('/sets') ? activeNavLinkClass : navLinkClass}>Vocabulary Sets</Link>
                           <a href="#" className={navLinkClass}>Quizzes</a>
-                          <a href="#" className={navLinkClass}>Community</a>
+                          <Link to="/community" className={location.pathname === '/community' ? activeNavLinkClass : navLinkClass}>Community</Link>
+                          {user?.email === 'tuanasishh@gmail.com' && (
+                            <Link to="/admin" className={location.pathname === '/admin' ? activeNavLinkClass : navLinkClass}>Admin</Link>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-4">
-                         <button className="hidden sm:flex min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-primary text-slate-50 text-sm font-bold leading-normal tracking-[0.015em] hover:opacity-90 transition-opacity">
+                        <button className="hidden sm:flex min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-primary text-slate-50 text-sm font-bold leading-normal tracking-[0.015em] hover:opacity-90 transition-opacity">
                           <span className="truncate">Upgrade</span>
                         </button>
-                        <div className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 border border-slate-200 dark:border-slate-700" style={{ backgroundImage: `url("${currentUser.avatar}")` }}></div>
-                         <button className="flex md:hidden max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-white gap-2 text-sm font-bold leading-normal tracking-[0.015em] min-w-0 px-2.5">
-                          <span className="material-symbols-outlined text-xl">menu</span>
+
+                        {/* User Avatar Dropdown */}
+                        <div className="relative">
+                          <button
+                            onClick={() => setShowUserMenu(!showUserMenu)}
+                            className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 border-2 border-slate-200 dark:border-slate-700 hover:border-primary dark:hover:border-primary transition-colors cursor-pointer"
+                            style={{ backgroundImage: `url("${profile?.avatar_url || 'https://via.placeholder.com/150'}")` }}
+                          />
+
+                          {/* Dropdown Menu */}
+                          {showUserMenu && (
+                            <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-800 rounded-lg shadow-lg ring-1 ring-slate-200 dark:ring-slate-700 py-1 z-50">
+                              <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700">
+                                <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{user?.email}</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">Level {profile?.level || 'Beginner'}</p>
+                              </div>
+                              <Link
+                                to="/profile"
+                                onClick={() => setShowUserMenu(false)}
+                                className="flex items-center gap-3 px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                              >
+                                <span className="material-symbols-outlined text-xl">person</span>
+                                <span>My Profile</span>
+                              </Link>
+                              <Link
+                                to="/dashboard"
+                                onClick={() => setShowUserMenu(false)}
+                                className="flex items-center gap-3 px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                              >
+                                <span className="material-symbols-outlined text-xl">dashboard</span>
+                                <span>Dashboard</span>
+                              </Link>
+                              <Link
+                                to="/settings"
+                                onClick={() => setShowUserMenu(false)}
+                                className="flex items-center gap-3 px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                              >
+                                <span className="material-symbols-outlined text-xl">settings</span>
+                                <span>Settings</span>
+                              </Link>
+                              <button
+                                onClick={handleLogout}
+                                className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                              >
+                                <span className="material-symbols-outlined text-xl">logout</span>
+                                <span>Logout</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Mobile Menu Button */}
+                        <button
+                          onClick={() => setShowMobileMenu(!showMobileMenu)}
+                          className="flex md:hidden max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-white gap-2 text-sm font-bold leading-normal tracking-[0.015em] min-w-0 px-2.5"
+                        >
+                          <span className="material-symbols-outlined text-xl">{showMobileMenu ? 'close' : 'menu'}</span>
                         </button>
                       </div>
                     </>
                   )}
                 </header>
+
+                {/* Mobile Menu */}
+                {showMobileMenu && !isLanding && (
+                  <div className="md:hidden border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-4 px-4">
+                    <nav className="flex flex-col gap-3">
+                      <Link
+                        to="/dashboard"
+                        onClick={() => setShowMobileMenu(false)}
+                        className={`flex items-center gap-3 px-4 py-3 rounded-lg ${location.pathname === '/dashboard' ? 'bg-primary/10 text-primary font-bold' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                      >
+                        <span className="material-symbols-outlined">dashboard</span>
+                        <span>Dashboard</span>
+                      </Link>
+                      <Link
+                        to="/explore"
+                        onClick={() => setShowMobileMenu(false)}
+                        className={`flex items-center gap-3 px-4 py-3 rounded-lg ${location.pathname === '/explore' || location.pathname.startsWith('/sets') ? 'bg-primary/10 text-primary font-bold' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                      >
+                        <span className="material-symbols-outlined">library_books</span>
+                        <span>Vocabulary Sets</span>
+                      </Link>
+                      <Link
+                        to="/profile"
+                        onClick={() => setShowMobileMenu(false)}
+                        className={`flex items-center gap-3 px-4 py-3 rounded-lg ${location.pathname === '/profile' ? 'bg-primary/10 text-primary font-bold' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                      >
+                        <span className="material-symbols-outlined">person</span>
+                        <span>My Profile</span>
+                      </Link>
+                      <div className="border-t border-slate-200 dark:border-slate-700 my-2"></div>
+                      <button
+                        onClick={handleLogout}
+                        className="flex items-center gap-3 px-4 py-3 rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      >
+                        <span className="material-symbols-outlined">logout</span>
+                        <span>Logout</span>
+                      </button>
+                    </nav>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -91,7 +199,7 @@ const Layout: React.FC<LayoutProps> = ({ children, hideHeader = false }) => {
             </div>
           </footer>
         )}
-         {!isLanding && !hideHeader && (
+        {!isLanding && !hideHeader && (
           <footer className="w-full mt-auto border-t border-slate-200 dark:border-slate-800">
             <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-10 py-8">
               <div className="flex flex-col md:flex-row justify-between items-center gap-4">

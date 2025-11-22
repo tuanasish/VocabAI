@@ -273,5 +273,58 @@ export const progressApi = {
             wordsDueToday,
             progressPercentage
         };
+    },
+
+    /**
+     * Get the last studied vocabulary set with progress data
+     */
+    async getLastStudiedSet(userId: string): Promise<{
+        setId: string;
+        setTitle: string;
+        setDescription: string | null;
+        imageUrl: string | null;
+        progress: number;
+        wordsDue: number;
+        totalWords: number;
+        lastReviewedAt: string;
+    } | null> {
+        // Get the most recent progress record
+        const { data: lastProgress, error: progressError } = await supabase
+            .from('user_progress')
+            .select(`
+                *,
+                word:words(
+                    *,
+                    vocabulary_set:vocabulary_sets(*)
+                )
+            `)
+            .eq('user_id', userId)
+            .not('last_reviewed_at', 'is', null)
+            .order('last_reviewed_at', { ascending: false })
+            .limit(1)
+            .single();
+
+        if (progressError || !lastProgress || !lastProgress.word) {
+            return null;
+        }
+
+        const word: any = lastProgress.word;
+        const set: any = word.vocabulary_set;
+
+        if (!set) return null;
+
+        // Get full progress for this set
+        const setProgress = await this.getSetProgress(userId, set.id);
+
+        return {
+            setId: set.id,
+            setTitle: set.title,
+            setDescription: set.description,
+            imageUrl: set.image_url,
+            progress: setProgress.progressPercentage,
+            wordsDue: setProgress.wordsDueToday,
+            totalWords: setProgress.totalWords,
+            lastReviewedAt: lastProgress.last_reviewed_at || new Date().toISOString()
+        };
     }
 };

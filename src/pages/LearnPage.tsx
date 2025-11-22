@@ -9,6 +9,7 @@ import SessionSummary from '../components/SessionSummary';
 import { ReviewRating } from '../lib/srsAlgorithm';
 import { progressApi } from '../lib/api/progressApi';
 import { useAuth } from '../contexts/AuthContext';
+import toast from 'react-hot-toast';
 
 type VocabularySet = Database['public']['Tables']['vocabulary_sets']['Row'];
 
@@ -92,7 +93,7 @@ const LearnPage: React.FC = () => {
         } catch (error) {
             console.error('Error recording review:', error);
             // Don't break the flow, just show error
-            alert(`Error: ${error instanceof Error ? error.message : 'Failed to record review'}`);
+            toast.error(`Error: ${error instanceof Error ? error.message : 'Failed to record review'}`);
         }
     };
 
@@ -100,7 +101,7 @@ const LearnPage: React.FC = () => {
         navigate(`/sets/${id}`);
     };
 
-    const totalReviewed = Object.values(reviewStats).reduce((sum, val) => sum + val, 0);
+    const totalReviewed = Object.values(reviewStats).reduce((sum: number, val: number) => sum + val, 0);
     const timeSpent = Math.floor((Date.now() - sessionStartTime) / 1000);
 
     if (loading) {

@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabaseClient';
 import { Database } from '../types/supabase';
 import { generateStory } from '../lib/aiGenerator';
 import { useSpeech } from '../hooks/useSpeech';
+import toast from 'react-hot-toast';
 
 type VocabularySet = Database['public']['Tables']['vocabulary_sets']['Row'];
 type Word = Database['public']['Tables']['words']['Row'];
@@ -41,13 +42,17 @@ const StoryModePage: React.FC = () => {
 
                 // Generate Story
                 if (wordsData && wordsData.length > 0) {
-                    const generatedStory = await generateStory(wordsData);
+                    const mappedWords = wordsData.map(w => ({
+                        word: w.word,
+                        meaning: w.definition
+                    }));
+                    const generatedStory = await generateStory(mappedWords);
                     setStory(generatedStory);
                 }
 
             } catch (error) {
                 console.error("Error initializing story mode:", error);
-                alert("Failed to load story. Please try again.");
+                toast.error("Failed to load story. Please try again.");
             } finally {
                 setIsLoading(false);
             }

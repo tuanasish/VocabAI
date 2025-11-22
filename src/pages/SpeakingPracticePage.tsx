@@ -4,6 +4,7 @@ import Layout from '../components/Layout';
 import { supabase } from '../lib/supabaseClient';
 import { Database } from '../types/supabase';
 import { useSpeech } from '../hooks/useSpeech';
+import toast from 'react-hot-toast';
 
 type VocabularySet = Database['public']['Tables']['vocabulary_sets']['Row'];
 type Word = Database['public']['Tables']['words']['Row'];
@@ -74,7 +75,7 @@ const SpeakingPracticePage: React.FC = () => {
                 checkPronunciation();
             };
         } else {
-            alert("Your browser does not support speech recognition. Please use Chrome or Edge.");
+            toast.error("Your browser does not support speech recognition. Please use Chrome or Edge.");
         }
     }, [currentIndex, words]); // Re-initialize if needed, though mostly static
 

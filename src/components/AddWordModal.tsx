@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import toast from 'react-hot-toast';
 
 interface AddWordModalProps {
     isOpen: boolean;
@@ -44,7 +45,7 @@ const AddWordModal: React.FC<AddWordModalProps> = ({ isOpen, onClose, onWordAdde
             setExample('');
         } catch (error) {
             console.error('Error adding word:', error);
-            alert('Failed to add word');
+            toast.error('Failed to add word');
         } finally {
             setLoading(false);
         }
