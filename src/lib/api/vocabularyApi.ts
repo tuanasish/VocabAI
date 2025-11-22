@@ -12,7 +12,7 @@ export const vocabularyApi = {
     async getAll(userId: string) {
         const { data, error } = await supabase
             .from('vocabulary_sets')
-            .select('*, words(count)')
+            .select('*')
             .eq('user_id', userId)
             .order('created_at', { ascending: false });
 
